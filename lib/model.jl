@@ -23,7 +23,11 @@ function att(w,a,h, o=Dict())
     alpha = alpha ./ sum(alpha,2)
     alpha = reshape(alpha, size(alpha)..., 1)
 
-    context = alpha .* a # B,L,1
+    context = alpha .* a # B,L,1 * B,L,D
+    # out = conv4(mask, ctx)
+    # size(mask) = (1,1,L,1)
+    # size(ctx)  = (B,1,L,D)
+    # reshape(out,B,1,D) == sum(context,2)
 end
 
 # loss functions

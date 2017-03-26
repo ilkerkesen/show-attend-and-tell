@@ -1,48 +1,13 @@
-# attention network
-# size(a) == (L,D,B)
-# L: number of region features (196)
-# D: size  of a region feature (512)
-# B: batchsize
-# size(h) == (B,H)
-# so I have a matrix (B,L,D)
-function att(w,a,h, o=Dict())
-    # get sizes
-    B,L,D  = size(a); H = size(h,2)
-    attdrop = get(o, :attdrop, 0.0)
-
-    # attention mechanism
-    aflat = reshape(a, B*L, D)
-    aatt = reshape(aflat*w[:wce], B, L, D) # size(wce): (D,D), projection
-    # aatt = aflat
-    hatt = reshape(h*w[:whe], B, 1, D) # size(whe): (H,D)
-    et = relu(reshape(aatt .+ hatt .+ w[:b1], B*L, D))
-    et = dropout(et, attdrop) * w[:watt] .+ w[:batt]
-    et = reshape(et, B, L)
-
-    alpha = exp(et) # B,L
-    alpha = alpha ./ sum(alpha,2)
-    alpha = reshape(alpha, size(alpha)..., 1)
-
-    context = alpha .* a # B,L,1 * B,L,D
-    # out = conv4(mask, ctx)
-    # size(mask) = (1,1,L,1)
-    # size(ctx)  = (B,1,L,D)
-    # reshape(out,B,1,D) == sum(context,2)
-end
-
 # loss functions
-function loss(w, s, visual, captions; o=Dict(), values=[])
+function loss(w, s, visual, captions, masks; o=Dict(), values=[])
     finetune = get(o, :finetune, false)
-    wdlen = get(o, :wdlen, 6)
+    visual = convert(o[:atype], visual)
     if finetune
-        visual = vgg19(w[1:end-o[:wdlen]], KnetArray(visual); o=o)
+        visual = vgg19(w["wcnn"], visual; o=o)
         visual = transpose(visual)
-    else
-        atype = typeof(AutoGrad.getval(w[1]))
-        visual = convert(atype, visual)
     end
 
-    lossval, nwords = decoder(w[end-o[:wdlen]+1:end], s, visual, captions; o=o)
+    lossval, nwords = decoder(w, s, visual, captions, masks; o=o)
     push!(values, AutoGrad.getval(lossval), AutoGrad.getval(nwords))
     return lossval/nwords
 end
@@ -51,9 +16,9 @@ end
 lossgradient = grad(loss)
 
 # loss function for decoder network
-function decoder(w, s, vis, seq; o=Dict())
+function decoder(w, sd, vis, seq, masks; o=Dict())
     total, count = 0, 0
-    atype = typeof(AutoGrad.getval(w[1]))
+    atype = o[:atype]
 
     # set dropouts
     vembdrop = get(o, :vembdrop, 0.0)
@@ -61,36 +26,40 @@ function decoder(w, s, vis, seq; o=Dict())
     softdrop = get(o, :softdrop, 0.0)
     fc7drop  = get(o, :fc7drop, 0.0)
 
-    # visual features
-    vis = dropout(vis, fc7drop)
-    x = vis * w[5]
-    x = dropout(x, vembdrop)
-
-    # feed LSTM with visual embeddings
-    (s[1], s[2]) = lstm(w[1], w[2], s[1], s[2], x)
+    # init state
+    h = mean(vis, 2)
+    h = reshape(vis, size(h,1), size(h,3))
+    s = (h,h)
 
     # textual features
-    x = convert(atype, seq[1])
-    for i = 1:length(seq)-1
-        x = x * w[6]
+    for t = 1:length(seq)-1
+        # make input
+        x = w["wemb"][seq[t],:]
         x = dropout(x, wembdrop)
-        (s[1], s[2]) = lstm(w[1], w[2], s[1], s[2], x)
-        ht = s[1]
-        ht = dropout(ht, softdrop)
-        ypred = logp(ht * w[3] .+ w[4], 2)
-        ygold = convert(atype, seq[i+1])
-        total += sum(ygold .* ypred)
-        count += sum(ygold)
+
+        # get context vector
+        ctx = att(w,a,s[1],o)
+
+        # lstm
+        (s[1], s[2]) = lstm(w["wdec"], w["bdec"], s[1], s[2], x, ctx)
+
+        # prediction
+        ht = dropout(s[1], softdrop)
+        ypred = ht * w["wsoft"] .+ w["bsoft"]
+        ygold = seq[t+1]
+
+        # loss calculcation
+        total += logprob(ygold,ypred,masks[t])
+        count += length(ygold)
         x = ygold
     end
-
 
     return (-total,count)
 end
 
 # generate
 function generate(w, wcnn, s, vis, vocab; maxlen=20, beamsize=1)
-    atype = typeof(AutoGrad.getval(w[1]))
+    atype = typeof(AutoGrad.getval(w[1]))<:KnetArray?KnetArray:Array
     if wcnn != nothing
         vis = KnetArray(vis)
         vis = vgg19(wcnn, vis)
@@ -121,7 +90,8 @@ function generate(w, wcnn, s, vis, vocab; maxlen=20, beamsize=1)
             onehotvec = zeros(Cuchar, 1, vocab.size)
             onehotvec[word2index(vocab, word)] = 1
             x = convert(atype, onehotvec) * w[6]
-            (st[1], st[2]) = lstm(w[1], w[2], st[1], st[2], x)
+            x = w[:]
+            (st[1], st[2]) = lstm(w[1], w[2], st[1], st[2], x, ctx)
             ypred = logp(st[1] * w[3] .+ w[4], 2)
             ypred = convert(Array{Float32}, ypred)[:]
 

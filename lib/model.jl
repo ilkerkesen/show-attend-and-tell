@@ -1,7 +1,8 @@
 # loss functions
 function loss(w, s, visual, captions, masks; o=Dict(), values=[])
     finetune = get(o, :finetune, false)
-    visual = convert(o[:atype], visual)
+    atype = get(o, :atype, AutoGrad.getval(w["wdec"]))
+    visual = convert(atype, visual)
     if finetune
         visual = vgg19(w["wcnn"], visual; o=o)
         visual = transpose(visual)
@@ -18,7 +19,7 @@ lossgradient = grad(loss)
 # loss function for decoder network
 function decoder(w, sd, vis, seq, masks; o=Dict())
     total, count = 0, 0
-    atype = o[:atype]
+    atype = get(o, :atype, AutoGrad.getval(typeof(w["wdec"])))
 
     # set dropouts
     vembdrop = get(o, :vembdrop, 0.0)
@@ -28,8 +29,8 @@ function decoder(w, sd, vis, seq, masks; o=Dict())
 
     # init state
     h = mean(vis, 2)
-    h = reshape(vis, size(h,1), size(h,3))
-    s = (h,h)
+    h = reshape(h, size(h,1), size(h,3))
+    c = copy(h)
 
     # textual features
     for t = 1:length(seq)-1
@@ -38,13 +39,13 @@ function decoder(w, sd, vis, seq, masks; o=Dict())
         x = dropout(x, wembdrop)
 
         # get context vector
-        ctx = att(w,a,s[1],o)
+        ctx = att(w,vis,h,o)
 
         # lstm
-        (s[1], s[2]) = lstm(w["wdec"], w["bdec"], s[1], s[2], x, ctx)
+        h,c = lstm(w["wdec"], w["bdec"], h, c, x, ctx)
 
         # prediction
-        ht = dropout(s[1], softdrop)
+        ht = dropout(h, softdrop)
         ypred = ht * w["wsoft"] .+ w["bsoft"]
         ygold = seq[t+1]
 
@@ -59,16 +60,17 @@ end
 
 # generate
 function generate(w, wcnn, s, vis, vocab; maxlen=20, beamsize=1)
-    atype = typeof(AutoGrad.getval(w[1]))<:KnetArray?KnetArray:Array
+    atype = typeof(AutoGrad.getval(w[1])) <: KnetArray ? KnetArray : Array
+    vis = convert(atype, vis)
     if wcnn != nothing
-        vis = KnetArray(vis)
         vis = vgg19(wcnn, vis)
         vis = transpose(vis)
-    else
-        vis = convert(atype, vis)
     end
-    x = vis * w[5]
-    (s[1], s[2]) = lstm(w[1], w[2], s[1], s[2], x)
+
+    # init state
+    h = mean(vis, 2)
+    h = reshape(h, size(h,1), size(h,3))
+    s = (h,h)
 
     # language generation with (sentence, state, probability) array
     sentences = Any[(Any[SOS],s,0.0)]
@@ -87,12 +89,12 @@ function generate(w, wcnn, s, vis, vocab; maxlen=20, beamsize=1)
             end
 
             # get probabilities
-            onehotvec = zeros(Cuchar, 1, vocab.size)
-            onehotvec[word2index(vocab, word)] = 1
-            x = convert(atype, onehotvec) * w[6]
-            x = w[:]
-            (st[1], st[2]) = lstm(w[1], w[2], st[1], st[2], x, ctx)
-            ypred = logp(st[1] * w[3] .+ w[4], 2)
+            x = w["wemb"][word2index(vocab,word),:]
+            x = reshape(x, 1, length(x))
+            ctx = att(w,vis,st[1],o)
+            (st[1], st[2]) = lstm(w["wdec"], w["bdec"], st[1], st[2], x, ctx)
+            ypred = ht * w["wsoft"] .+ w["bsoft"]
+            ypred = logp(ypred, 2)
             ypred = convert(Array{Float32}, ypred)[:]
 
             # add most probable predictions to array

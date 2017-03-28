@@ -60,4 +60,6 @@ function att(w,a,h, o=Dict())
     alpha = reshape(alpha, size(alpha)..., 1)
 
     context = alpha .* a # B,L,1 * B,L,D
+    context = sum(context,2)
+    context = reshape(context, size(context,1), size(context,3))
 end

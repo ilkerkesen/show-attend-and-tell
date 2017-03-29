@@ -1,7 +1,7 @@
 # loss functions
 function loss(w, s, visual, captions, masks; o=Dict(), values=[])
     finetune = get(o, :finetune, false)
-    atype = get(o, :atype, AutoGrad.getval(w["wdec"]))
+    atype = get(o, :atype, AutoGrad.getval(typeof(w["wdec"])))
     visual = convert(atype, visual)
     if finetune
         visual = vgg19(w["wcnn"], visual; o=o)

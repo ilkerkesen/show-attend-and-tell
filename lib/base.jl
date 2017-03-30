@@ -56,7 +56,15 @@ function att(w,a,h, o=Dict())
     et = dropout(et, attdrop) * w["watt"] # watt: D,1
     et = reshape(et, B, L)
 
-    alpha = logp(et, 2)
+    # alpha = logp(et, 2)
+    et1 = maximum(et, 2)
+    et2 = et .- et1
+    et3 = exp(et2)
+    et4 = sum(et3, 2)
+    et5 = et3 ./ et4
+
+    alpha = exp(et5)
+    alpha = alpha ./ sum(alpha,2)
     alpha = reshape(alpha, size(alpha)..., 1)
 
     context = alpha .* a # B,L,1 * B,L,D

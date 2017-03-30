@@ -59,27 +59,29 @@ function decoder(w, sd, vis, seq, masks; o=Dict())
 end
 
 # generate
-function generate(w, wcnn, s, vis, vocab; maxlen=20, beamsize=1)
-    atype = typeof(AutoGrad.getval(w[1])) <: KnetArray ? KnetArray : Array
+function generate(w, s, vis, vocab; maxlen=20, beamsize=1)
+    atype = typeof(AutoGrad.getval(w["wdec"])) <: KnetArray ? KnetArray : Array
+    wcnn = get(w, "wcnn", nothing)
     vis = convert(atype, vis)
     if wcnn != nothing
         vis = vgg19(wcnn, vis)
         vis = transpose(vis)
     end
+    vis = reshape(vis, 1, size(vis,1)*size(vis,2), size(vis,3))
 
     # init state
     h = mean(vis, 2)
     h = reshape(h, size(h,1), size(h,3))
-    s = (h,h)
+    c = copy(h)
 
     # language generation with (sentence, state, probability) array
-    sentences = Any[(Any[SOS],s,0.0)]
+    sentences = Any[(Any[SOS],h,c,0.0)]
     while true
         changed = false
         for i = 1:beamsize
             # get current sentence
             curr = shift!(sentences)
-            sentence, st, prob = curr
+            sentence, ht, ct, prob = curr
 
             # get last word
             word = sentence[end]
@@ -91,8 +93,8 @@ function generate(w, wcnn, s, vis, vocab; maxlen=20, beamsize=1)
             # get probabilities
             x = w["wemb"][word2index(vocab,word),:]
             x = reshape(x, 1, length(x))
-            ctx = att(w,vis,st[1],o)
-            (st[1], st[2]) = lstm(w["wdec"], w["bdec"], st[1], st[2], x, ctx)
+            ctx = att(w,vis,ht)
+            (ht,ct) = lstm(w["wdec"], w["bdec"], ht, ct, x, ctx)
             ypred = ht * w["wsoft"] .+ w["bsoft"]
             ypred = logp(ypred, 2)
             ypred = convert(Array{Float32}, ypred)[:]
@@ -103,10 +105,9 @@ function generate(w, wcnn, s, vis, vocab; maxlen=20, beamsize=1)
                 ind = maxinds[j]
                 new_word = index2word(vocab, ind)
                 new_sentence = copy(sentence)
-                new_state = copy(st)
                 new_probability = prob + ypred[ind]
                 push!(new_sentence, new_word)
-                push!(sentences, (new_sentence, new_state, new_probability))
+                push!(sentences, (new_sentence, copy(ht), copy(ct), new_probability))
             end
             changed = true
 

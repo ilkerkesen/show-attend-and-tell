@@ -27,9 +27,8 @@ function decoder(w, sd, vis, seq, masks; o=Dict())
     softdrop = get(o, :softdrop, 0.0)
     fc7drop  = get(o, :fc7drop, 0.0)
 
-    # init state
-    h = mean(vis, 2)
-    h = reshape(h, size(h,1), size(h,3))
+    # I want to this (but currently we do not have)
+    h = sum(vis, 2) / size(vis, 2)
     c = copy(h)
 
     # textual features

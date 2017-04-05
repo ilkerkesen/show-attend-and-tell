@@ -2,6 +2,7 @@
 function loss(w, s, visual, captions, masks; o=Dict(), values=[])
     finetune = get(o, :finetune, false)
     atype = get(o, :atype, AutoGrad.getval(typeof(w["wdec"])))
+    atype = atype<:Array?Array:KnetArray
     visual = convert(atype, visual)
     if finetune
         visual = vgg19(w["wcnn"], visual; o=o)
@@ -28,6 +29,7 @@ function decoder(w, sd, vis, seq, masks; o=Dict())
     fc7drop  = get(o, :fc7drop, 0.0)
 
     h = sum(vis, 2) / size(vis, 2)
+    h = reshape(h, size(h,1), size(h,3))
     c = copy(h)
 
     # textual features
@@ -67,8 +69,7 @@ function generate(w, s, vis, vocab; maxlen=20, beamsize=1)
     end
     vis = reshape(vis, 1, size(vis,1)*size(vis,2), size(vis,3))
 
-    # init state
-    h = mean(vis, 2)
+    h = sum(vis, 2) / size(vis, 2)
     h = reshape(h, size(h,1), size(h,3))
     c = copy(h)
 

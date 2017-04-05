@@ -1,12 +1,3 @@
- # dropout layer
-function dropout(x,d)
-    if d > 0
-        return x .* (rand!(similar(AutoGrad.getval(x))) .> d) * (1/(1-d))
-    else
-        return x
-    end
-end
-
 # LSTM model - input * weight, concatenated weights
 function lstm(weight, bias, hidden, cell, input, ctx)
     gates   = hcat(input,hidden,ctx) * weight .+ bias

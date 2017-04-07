@@ -13,7 +13,8 @@ function initweights(o::Dict)
     w["wdec"] = o[:winit]*randn(o[:embed]+o[:hidden]+D, 4*o[:hidden])
     w["bdec"] = zeros(1, 4*o[:hidden])
     w["bdec"][1:o[:hidden]] = 1 # forget gate bias
-    w["wsoft"] = o[:winit]*randn(o[:hidden], o[:vocabsize])
+    w["wsoft"] = o[:winit]*randn(
+        o[:hidden]+o[:embed]+D, o[:vocabsize])
     w["bsoft"] = zeros(1, o[:vocabsize])
     w["wemb"] = o[:winit]*randn(o[:vocabsize], o[:embed])
     w["wce"] = o[:winit]*randn(D, D)

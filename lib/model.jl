@@ -46,7 +46,10 @@ function decoder(w, sd, vis, seq, masks; o=Dict())
 
         # prediction
         ht = dropout(h, softdrop)
-        ypred = ht * w["wsoft"] .+ w["bsoft"]
+        # info("sizes! (ht:", size(ht), ",x:", size(x), ",ctx:", size(ctx), ")")
+        input = hcat(ht,x,ctx)
+        # info("size(input):$(size(input)),size(w[\"wsoft\"]):$(size(w["wsoft"]))")
+        ypred = input * w["wsoft"] .+ w["bsoft"]
         ygold = seq[t+1]
 
         # loss calculcation
@@ -94,7 +97,7 @@ function generate(w, s, vis, vocab; maxlen=20, beamsize=1)
             x = reshape(x, 1, length(x))
             ctx = att(w,vis,ht)
             (ht,ct) = lstm(w["wdec"], w["bdec"], ht, ct, x, ctx)
-            ypred = ht * w["wsoft"] .+ w["bsoft"]
+            ypred = hcat(ht,x,ctx) * w["wsoft"] .+ w["bsoft"]
             ypred = logp(ypred, 2)
             ypred = convert(Array{Float32}, ypred)[:]
 

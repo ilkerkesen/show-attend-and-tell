@@ -64,8 +64,7 @@ function generate(w, s, vis, vocab; maxlen=20, beamsize=1)
     wcnn = get(w, "wcnn", nothing)
     vis = convert(atype, vis)
     if wcnn != nothing
-        vis = vgg19(wcnn, vis)
-        vis = transpose(vis)
+        vis = vgg19(wcnn, vis; o=Dict(:featuremaps=>true))
     end
     vis = reshape(vis, 1, size(vis,1)*size(vis,2), size(vis,3))
 
@@ -116,7 +115,7 @@ function generate(w, s, vis, vocab; maxlen=20, beamsize=1)
             end
         end
 
-        orders = sortperm(map(x -> x[3], sentences), rev=true)
+        orders = sortperm(map(x -> x[4], sentences), rev=true)
         sentences = sentences[orders[1:beamsize]]
 
         if !changed

@@ -21,18 +21,3 @@ function initweights(o::Dict)
     w["watt"] = o[:winit]*randn(D,1)
     return convert_weight(o[:atype], w)
 end
-
-function convert_weight(atype, w::Dict)
-    for k in keys(w)
-        w[k] = convert_weight(atype, w[k])
-    end
-    return w
-end
-
-function convert_weight(atype, w::Array{Any})
-    map(i->convert_weight(atype,w[i]), [1:length(w)...])
-end
-
-function convert_weight{T<:Number}(atype, w::Array{T})
-    convert(atype, w)
-end

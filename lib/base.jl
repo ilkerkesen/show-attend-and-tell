@@ -1,6 +1,6 @@
 # LSTM model - input * weight, concatenated weights
-function lstm(weight, bias, hidden, cell, input, ctx)
-    gates   = hcat(input,hidden,ctx) * weight .+ bias
+function lstm(weight, bias, hidden, cell, input)
+    gates   = hcat(input,hidden) * weight .+ bias
     hsize   = size(hidden,2)
     forget  = sigm(gates[:,1:hsize])
     ingate  = sigm(gates[:,1+hsize:2hsize])

@@ -41,8 +41,11 @@ function decoder(w, sd, vis, seq, masks; o=Dict())
         # get context vector
         ctx = att(w,vis,h,o)
 
+        # make input
+        x = hcat(ctx,wemb)
+
         # lstm
-        h,c = lstm(w["wdec"], w["bdec"], h, c, x, ctx)
+        h,c = lstm(w["wdec"], w["bdec"], h, c, x)
 
         # prediction
         ht = dropout(h, softdrop)
